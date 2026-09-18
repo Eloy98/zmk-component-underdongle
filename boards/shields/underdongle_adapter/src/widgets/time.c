@@ -31,7 +31,7 @@ ZMK_DISPLAY_WIDGET_LISTENER(widget_time, struct time_notification, time_update_c
 ZMK_SUBSCRIPTION(widget_time, time_notification);
 
 static void cursor_timer_cb(lv_timer_t *timer) {
-    lv_obj_t *cursor = lv_timer_get_user_data(timer);
+    lv_obj_t *cursor = timer->user_data;
     lv_opa_t opa = lv_obj_get_style_bg_opa(cursor, LV_PART_MAIN);
     lv_obj_set_style_bg_opa(cursor, opa == LV_OPA_TRANSP ? LV_OPA_COVER : LV_OPA_TRANSP,
                             LV_PART_MAIN);
