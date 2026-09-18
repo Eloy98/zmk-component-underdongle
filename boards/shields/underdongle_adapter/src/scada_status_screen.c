@@ -492,12 +492,13 @@ lv_obj_t *zmk_display_status_screen(void) {
 
     lv_obj_add_flag(vol_popup_container, LV_OBJ_FLAG_HIDDEN);
 
-    // Initialize all event listeners
+    // Initialize event listeners that use ZMK_DISPLAY_WIDGET_LISTENER
     scada_volume_init();
     scada_time_init();
     scada_layer_init();
-    scada_mods_init();
-    scada_battery_init();
+
+    // Note: scada_mods and scada_battery use ZMK_LISTENER, not ZMK_DISPLAY_WIDGET_LISTENER
+    // They are automatically registered via ZMK_SUBSCRIPTION, no manual init needed
 
     // Initialize modifier state from current HID state
     zmk_mod_flags_t mods = zmk_hid_get_explicit_mods();
