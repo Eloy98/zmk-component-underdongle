@@ -1,21 +1,21 @@
 #include "modifiers.h"
 
-#include <zmk/display.h>
-#include <zmk/events/keycode_state_changed.h>
-#include <zmk/event_manager.h>
-#include <zmk/hid.h>
 #include <dt-bindings/zmk/hid_usage.h>
 #include <dt-bindings/zmk/hid_usage_pages.h>
+#include <zmk/display.h>
+#include <zmk/event_manager.h>
+#include <zmk/events/keycode_state_changed.h>
+#include <zmk/hid.h>
 
-#include <fonts.h>
+LV_FONT_DECLARE(vt323_16);
 
 #include <zephyr/logging/log.h>
 LOG_MODULE_DECLARE(zmk, CONFIG_ZMK_LOG_LEVEL);
 
 static sys_slist_t widgets = SYS_SLIST_STATIC_INIT(&widgets);
 
-static uint32_t color_inactive = 0x444444;
-static uint32_t color_active = 0xfcba03;
+#define MOD_ACTIVE "#33FF33"
+#define MOD_INACTIVE "#1A4D1A"
 
 struct modifier_state {
     bool gui;
@@ -31,21 +31,13 @@ static struct modifier_state current_state = {
     .shift = false,
 };
 
-static void set_modifier_color(lv_obj_t *label, bool active) {
-    if (active) {
-        lv_obj_set_style_text_color(label, lv_color_hex(color_active), LV_PART_MAIN);
-    } else {
-        lv_obj_set_style_text_color(label, lv_color_hex(color_inactive), LV_PART_MAIN);
-    }
-}
-
 static void modifier_update_cb(struct modifier_state state) {
     struct zmk_widget_modifiers *widget;
     SYS_SLIST_FOR_EACH_CONTAINER(&widgets, widget, node) {
-        set_modifier_color(widget->gui_label, state.gui);
-        set_modifier_color(widget->alt_label, state.alt);
-        set_modifier_color(widget->ctrl_label, state.ctrl);
-        set_modifier_color(widget->shift_label, state.shift);
+        lv_label_set_text_fmt(
+            widget->obj, "%s [GUI]#%s [ALT]#%s [CTRL]#%s [SHFT]#",
+            state.gui ? MOD_ACTIVE : MOD_INACTIVE, state.alt ? MOD_ACTIVE : MOD_INACTIVE,
+            state.ctrl ? MOD_ACTIVE : MOD_INACTIVE, state.shift ? MOD_ACTIVE : MOD_INACTIVE);
     }
 }
 
@@ -99,38 +91,15 @@ static int keycode_state_changed_listener(const zmk_event_t *eh) {
 ZMK_LISTENER(widget_modifiers, keycode_state_changed_listener);
 ZMK_SUBSCRIPTION(widget_modifiers, zmk_keycode_state_changed);
 
-// ZMK_DISPLAY_WIDGET_LISTENER(widget_modifiers, struct modifier_state, modifier_update_cb,
+// ZMK_DISPLAY_WIDGET_LISTENER(widget_modifiers, struct modifier_state,
+// modifier_update_cb,
 //                             modifiers_get_caps_state)
 
 int zmk_widget_modifiers_init(struct zmk_widget_modifiers *widget, lv_obj_t *parent) {
-    widget->obj = lv_obj_create(parent);
-    lv_obj_set_size(widget->obj, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
-    lv_obj_set_style_border_width(widget->obj, 0, LV_PART_MAIN);
-    lv_obj_set_style_pad_all(widget->obj, 0, LV_PART_MAIN);
-    lv_obj_set_flex_flow(widget->obj, LV_FLEX_FLOW_ROW);
-    lv_obj_set_flex_align(widget->obj, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER,
-                          LV_FLEX_ALIGN_CENTER);
-    lv_obj_set_style_pad_column(widget->obj, 4, LV_PART_MAIN);
-
-    widget->gui_label = lv_label_create(widget->obj);
-    lv_label_set_text(widget->gui_label, "GUI");
-    lv_obj_set_style_text_font(widget->gui_label, &cascadia_latin_ru_fa_14, LV_PART_MAIN);
-    lv_obj_set_style_text_color(widget->gui_label, lv_color_hex(color_inactive), LV_PART_MAIN);
-
-    widget->alt_label = lv_label_create(widget->obj);
-    lv_label_set_text(widget->alt_label, "ALT");
-    lv_obj_set_style_text_font(widget->alt_label, &cascadia_latin_ru_fa_14, LV_PART_MAIN);
-    lv_obj_set_style_text_color(widget->alt_label, lv_color_hex(color_inactive), LV_PART_MAIN);
-
-    widget->ctrl_label = lv_label_create(widget->obj);
-    lv_label_set_text(widget->ctrl_label, "CTRL");
-    lv_obj_set_style_text_font(widget->ctrl_label, &cascadia_latin_ru_fa_14, LV_PART_MAIN);
-    lv_obj_set_style_text_color(widget->ctrl_label, lv_color_hex(color_inactive), LV_PART_MAIN);
-
-    widget->shift_label = lv_label_create(widget->obj);
-    lv_label_set_text(widget->shift_label, "SHFT");
-    lv_obj_set_style_text_font(widget->shift_label, &cascadia_latin_ru_fa_14, LV_PART_MAIN);
-    lv_obj_set_style_text_color(widget->shift_label, lv_color_hex(color_inactive), LV_PART_MAIN);
+    widget->obj = lv_label_create(parent);
+    lv_obj_set_style_text_font(widget->obj, &vt323_16, LV_PART_MAIN);
+    lv_obj_set_style_text_color(widget->obj, lv_color_hex(0x33FF33), LV_PART_MAIN);
+    lv_label_set_recolor(widget->obj, true);
 
     sys_slist_append(&widgets, &widget->node);
 

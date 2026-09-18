@@ -4,6 +4,8 @@ zephyr_library()
 
 if(CONFIG_SHIELD_UNDERDONGLE_ADAPTER)
 
+        zephyr_library_sources(src/widgets/vt323_16.c)
+
         add_subdirectory(${ZEPHYR_CURRENT_MODULE_DIR}/drivers/display)
 
         if(CONFIG_DT_HAS_ZMK_BEHAVIOR_CAPS_WORD_ENABLED)

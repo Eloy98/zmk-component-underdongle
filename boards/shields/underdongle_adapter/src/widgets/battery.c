@@ -1,13 +1,16 @@
 #include "battery.h"
 
-#include <zmk/display.h>
 #include <zmk/battery.h>
 #include <zmk/ble.h>
+#include <zmk/display.h>
+#include <zmk/event_manager.h>
 #include <zmk/events/battery_state_changed.h>
 #include <zmk/events/split_central_status_changed.h>
-#include <zmk/event_manager.h>
 
-#include <fonts.h>
+LV_FONT_DECLARE(vt323_16);
+
+#define CRT_GREEN 0x33FF33
+#define CRT_BACKGROUND 0x050F05
 
 static sys_slist_t widgets = SYS_SLIST_STATIC_INIT(&widgets);
 
@@ -21,71 +24,28 @@ struct connection_status {
     bool connected;
 };
 
-static void set_battery_state(lv_obj_t *widget_obj, struct battery_state state,
+static void set_battery_state(struct zmk_widget_battery *widget, struct battery_state state,
                               bool is_initialized) {
     if (!is_initialized || state.source >= ZMK_SPLIT_BLE_PERIPHERAL_COUNT) {
         return;
     }
 
-    lv_obj_t *info_container = lv_obj_get_child(widget_obj, state.source);
-    if (!info_container) {
-        return;
-    }
-
-    lv_obj_t *num = lv_obj_get_child(info_container, 0);
-    if (!num) {
-        return;
-    }
-
-    lv_obj_set_style_text_color(num, lv_color_white(), 0);
-    if (state.level > 90) {
-        lv_label_set_text_fmt(num, "%d%% " LV_SYMBOL_BATTERY_FULL, state.level);
-    } else if (state.level > 60) {
-        lv_label_set_text_fmt(num, "%d%% " LV_SYMBOL_BATTERY_3, state.level);
-    } else if (state.level > 40) {
-        lv_label_set_text_fmt(num, "%d%% " LV_SYMBOL_BATTERY_2, state.level);
-    } else if (state.level > 10) {
-        lv_label_set_text_fmt(num, "%d%% " LV_SYMBOL_BATTERY_1, state.level);
-    } else {
-        lv_label_set_text_fmt(num, "%d%% " LV_SYMBOL_BATTERY_EMPTY, state.level);
-        lv_obj_set_style_text_color(num, lv_color_hex(0xFFB802), 0);
-    }
+    lv_label_set_text_fmt(widget->battery_label, "[BAT:%d%%]", state.level);
 }
 
-static void set_connection_status(lv_obj_t *widget_obj, struct connection_status status,
-                                  bool is_initialized) {
+static void set_connection_status(struct zmk_widget_battery *widget,
+                                  struct connection_status status, bool is_initialized) {
     if (!is_initialized || status.source >= ZMK_SPLIT_BLE_PERIPHERAL_COUNT) {
         return;
     }
 
-    lv_obj_t *info_container = lv_obj_get_child(widget_obj, status.source);
-    if (!info_container) {
-        return;
-    }
-
-    lv_obj_t *num = lv_obj_get_child(info_container, 0);
-    lv_obj_t *nc = lv_obj_get_child(info_container, 1);
-    if (!num || !nc) {
-        return;
-    }
-
-    // Prevent animation stacking on rapid connection changes
-    lv_anim_del(num, NULL);
-    lv_anim_del(nc, NULL);
-
-    if (status.connected) {
-        lv_obj_fade_out(nc, 150, 0);
-        lv_obj_fade_in(num, 150, 250);
-    } else {
-        lv_obj_fade_out(num, 150, 0);
-        lv_obj_fade_in(nc, 150, 250);
-    }
+    lv_label_set_text_fmt(widget->ble_label, "[BLE:%d]", status.connected ? 1 : 0);
 }
 
 void battery_state_update_cb(struct battery_state state) {
     struct zmk_widget_battery *widget;
     SYS_SLIST_FOR_EACH_CONTAINER(&widgets, widget, node) {
-        set_battery_state(widget->obj, state, widget->initialized);
+        set_battery_state(widget, state, widget->initialized);
     }
 }
 
@@ -106,7 +66,7 @@ static struct battery_state get_battery_state(const zmk_event_t *eh) {
 void connection_status_update_cb(struct connection_status status) {
     struct zmk_widget_battery *widget;
     SYS_SLIST_FOR_EACH_CONTAINER(&widgets, widget, node) {
-        set_connection_status(widget->obj, status, widget->initialized);
+        set_connection_status(widget, status, widget->initialized);
     }
 }
 
@@ -134,34 +94,24 @@ ZMK_SUBSCRIPTION(widget_connection_status, zmk_split_central_status_changed);
 
 int zmk_widget_battery_init(struct zmk_widget_battery *widget, lv_obj_t *parent) {
     widget->obj = lv_obj_create(parent);
-    lv_obj_set_size(widget->obj, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
+    lv_obj_set_size(widget->obj, 272, 18);
+    lv_obj_set_style_bg_color(widget->obj, lv_color_hex(CRT_BACKGROUND), LV_PART_MAIN);
+    lv_obj_set_style_bg_opa(widget->obj, LV_OPA_TRANSP, LV_PART_MAIN);
     lv_obj_set_style_border_width(widget->obj, 0, LV_PART_MAIN);
     lv_obj_set_style_pad_all(widget->obj, 0, LV_PART_MAIN);
-    lv_obj_set_flex_flow(widget->obj, LV_FLEX_FLOW_ROW);
-    lv_obj_set_flex_align(widget->obj, LV_FLEX_ALIGN_END, LV_FLEX_ALIGN_CENTER,
-                          LV_FLEX_ALIGN_CENTER);
-    lv_obj_set_style_pad_column(widget->obj, 8, LV_PART_MAIN);
+    lv_obj_clear_flag(widget->obj, LV_OBJ_FLAG_SCROLLABLE);
 
-    for (int i = 0; i < ZMK_SPLIT_BLE_PERIPHERAL_COUNT; i++) {
-        lv_obj_t *info_container = lv_obj_create(widget->obj);
-        lv_obj_center(info_container);
-        lv_obj_set_size(info_container, 60, 20);
+    widget->battery_label = lv_label_create(widget->obj);
+    lv_obj_set_style_text_font(widget->battery_label, &vt323_16, LV_PART_MAIN);
+    lv_obj_set_style_text_color(widget->battery_label, lv_color_hex(CRT_GREEN), LV_PART_MAIN);
+    lv_label_set_text(widget->battery_label, "[BAT:--%]");
+    lv_obj_align(widget->battery_label, LV_ALIGN_LEFT_MID, 0, 0);
 
-        lv_obj_t *num = lv_label_create(info_container);
-        lv_obj_set_style_text_font(num, &cascadia_latin_ru_fa_14, 0);
-        lv_obj_set_style_opa(num, 255, 0);
-        lv_obj_align(num, LV_ALIGN_RIGHT_MID, 0, 0);
-        lv_label_set_text(num, "N/A");
-
-        lv_obj_set_style_opa(num, 0, 0);
-
-        lv_obj_t *nc = lv_label_create(info_container);
-        lv_obj_set_style_text_font(nc, &cascadia_latin_ru_fa_14, 0);
-        lv_obj_set_style_text_color(nc, lv_color_hex(0xe63030), 0);
-        lv_obj_align(nc, LV_ALIGN_RIGHT_MID, 0, 0);
-        lv_label_set_text(nc, LV_SYMBOL_CLOSE);
-        lv_obj_set_style_opa(nc, 255, 0);
-    }
+    widget->ble_label = lv_label_create(widget->obj);
+    lv_obj_set_style_text_font(widget->ble_label, &vt323_16, LV_PART_MAIN);
+    lv_obj_set_style_text_color(widget->ble_label, lv_color_hex(CRT_GREEN), LV_PART_MAIN);
+    lv_label_set_text(widget->ble_label, "[BLE:0]");
+    lv_obj_align(widget->ble_label, LV_ALIGN_RIGHT_MID, 0, 0);
 
     sys_slist_append(&widgets, &widget->node);
 

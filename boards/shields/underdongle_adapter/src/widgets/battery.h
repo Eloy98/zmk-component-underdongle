@@ -6,6 +6,8 @@
 struct zmk_widget_battery {
     sys_snode_t node;
     lv_obj_t *obj;
+    lv_obj_t *battery_label;
+    lv_obj_t *ble_label;
     bool initialized;
 };
 
