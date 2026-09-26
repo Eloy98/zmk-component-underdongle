@@ -19,9 +19,5 @@ if(CONFIG_SHIELD_UNDERDONGLE_ADAPTER)
     zephyr_library_sources(src/hid.c)
   endif()
 
-  # Body pixel font (VT323). Lives under src/widgets/ but is a pure LVGL font
-  # asset; compiled directly so the UI can reference vt323_16.
-  zephyr_library_sources(src/widgets/vt323_16.c)
-
   zephyr_library_sources(${font_sources})
 endif()
