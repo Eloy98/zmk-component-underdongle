@@ -11,6 +11,7 @@ LV_FONT_DECLARE(cascadia_digits_28);
 #define BAT_SEGS 5
 #define VOL_SEGS 8
 #define VOL_HUD_MS 1500
+#define CURSOR_BLINK_MS 1000
 
 enum center_mode { CENTER_TIME, CENTER_VOLUME };
 
@@ -21,6 +22,8 @@ static lv_obj_t *bat_l_pct;
 static lv_obj_t *bat_r_pct;
 static lv_obj_t *status_label; /* "VOL:65% BLE.1" (top-right) */
 static lv_obj_t *center_time;  /* big clock */
+static lv_obj_t *center_row;    /* clock + cursor; hidden together during VOL HUD */
+static lv_obj_t *center_cursor; /* blinking terminal-style cursor */
 static lv_obj_t *center_vol;   /* "VOL: 65%" (HUD) */
 static lv_obj_t *center_vol_bar;
 static lv_obj_t *center_vol_segs[VOL_SEGS];
@@ -120,6 +123,12 @@ static lv_obj_t *make_box(lv_obj_t *parent, int w, int h) {
     return b;
 }
 
+/* Blinking terminal cursor beside the clock, toggled at 1 Hz. */
+static void cursor_blink_cb(lv_timer_t *t) {
+    lv_opa_t opa = lv_obj_get_style_bg_opa(center_cursor, 0);
+    lv_obj_set_style_bg_opa(center_cursor, opa == LV_OPA_TRANSP ? LV_OPA_COVER : LV_OPA_TRANSP, 0);
+}
+
 /* ---------- build (once) ---------- */
 void dongle_main_screen_create(lv_obj_t *screen) {
     lv_obj_set_style_bg_color(screen, lv_color_hex(UI_COLOR_BG), 0);
@@ -149,9 +158,30 @@ void dongle_main_screen_create(lv_obj_t *screen) {
     lv_obj_t *cbox_i = make_box(screen, 88, 38);
     lv_obj_center(cbox_i);
 
-    center_time = make_label(cbox_i, &cascadia_digits_28, UI_COLOR_FG);
-    lv_label_set_text(center_time, "16:33");
-    lv_obj_center(center_time);
+    /* clock + blinking cursor grouped in a centered flex row */
+    center_row = lv_obj_create(cbox_i);
+    lv_obj_set_size(center_row, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
+    lv_obj_set_style_bg_opa(center_row, LV_OPA_TRANSP, 0);
+    lv_obj_set_style_border_width(center_row, 0, 0);
+    lv_obj_set_style_radius(center_row, 0, 0);
+    lv_obj_set_style_pad_all(center_row, 0, 0);
+    lv_obj_set_style_pad_column(center_row, 4, 0);
+    lv_obj_set_flex_flow(center_row, LV_FLEX_FLOW_ROW);
+    lv_obj_set_flex_align(center_row, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER,
+                          LV_FLEX_ALIGN_CENTER);
+    lv_obj_clear_flag(center_row, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_center(center_row);
+
+    center_time = make_label(center_row, &cascadia_digits_28, UI_COLOR_FG);
+    lv_label_set_text(center_time, "00:00");
+
+    center_cursor = lv_obj_create(center_row);
+    lv_obj_set_size(center_cursor, 3, 22);
+    lv_obj_set_style_bg_color(center_cursor, lv_color_hex(UI_COLOR_FG), 0);
+    lv_obj_set_style_bg_opa(center_cursor, LV_OPA_COVER, 0);
+    lv_obj_set_style_border_width(center_cursor, 0, 0);
+    lv_obj_set_style_radius(center_cursor, 0, 0);
+    lv_obj_clear_flag(center_cursor, LV_OBJ_FLAG_SCROLLABLE);
 
     center_vol = make_label(cbox_i, &vt323_16, UI_COLOR_FG);
     lv_label_set_text(center_vol, "VOL: 50%");
@@ -195,6 +225,9 @@ void dongle_main_screen_create(lv_obj_t *screen) {
     lv_obj_set_style_pad_ver(layer_badge, 1, 0);
     lv_label_set_text(layer_badge, "> #00 BASE <");
     lv_obj_align(layer_badge, LV_ALIGN_BOTTOM_RIGHT, -6, -3);
+
+    /* 1 Hz clock cursor blink */
+    lv_timer_create(cursor_blink_cb, CURSOR_BLINK_MS, NULL);
 }
 
 /* ---------- runtime updates ---------- */
@@ -228,7 +261,8 @@ void dongle_ui_update_ble(uint8_t profile_index) {
 static void vol_timeout_cb(lv_timer_t *t) {
     lv_obj_add_flag(center_vol, LV_OBJ_FLAG_HIDDEN);
     lv_obj_add_flag(center_vol_bar, LV_OBJ_FLAG_HIDDEN);
-    lv_obj_clear_flag(center_time, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_clear_flag(center_row, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_set_style_bg_opa(center_cursor, LV_OPA_COVER, 0); /* cursor visible on return */
     center_mode = CENTER_TIME;
     vol_timer = NULL; /* one-shot: LVGL frees it after this callback */
 }
@@ -244,7 +278,7 @@ void dongle_ui_update_volume(uint8_t percent) {
     fill_segments(center_vol_segs, VOL_SEGS, (percent * VOL_SEGS + 50) / 100);
 
     /* HUD replaces ONLY the center area; corners stay put */
-    lv_obj_add_flag(center_time, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_add_flag(center_row, LV_OBJ_FLAG_HIDDEN);
     lv_obj_clear_flag(center_vol, LV_OBJ_FLAG_HIDDEN);
     lv_obj_clear_flag(center_vol_bar, LV_OBJ_FLAG_HIDDEN);
     center_mode = CENTER_VOLUME;
